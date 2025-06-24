@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, Datetime, Float
+from sqlalchemy import Column, String, Integer, DateTime, Float
 from sqlalchemy.orm import relationship
 from datetime import datetime 
 from typing import Union
@@ -13,7 +13,7 @@ class Produto(Base):
     nome = Column(String(140), unique = True)
     quantidade = Column(Integer)
     valor = Column(Float)
-    data_insercao = Column(Datetime, default = datetime.now())
+    data_insercao = Column(DateTime, default = datetime.now())
 
     # Definição do relacionamento entre o produto e o comentário.
     # Essa relação é implícita, não está salva na tabela 'produto',
@@ -22,7 +22,7 @@ class Produto(Base):
     comentarios = relationship('Comentario')
 
     def __init__(self, nome:str, quantidade:int, valor:float,
-                  data_insercao:Union[Datetime, None] = None):
+                  data_insercao:Union[DateTime, None] = None):
         """
         Cria um Produto
         

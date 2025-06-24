@@ -79,3 +79,6 @@ def add_comentario(produto_id):
     produto.adiciona_comentario(comentario)
     session.commit()
     return render_template('produto.html', produto = produto), 200 
+
+if __name__ == "__main__":
+    app.run(debug=True, port=5001)
