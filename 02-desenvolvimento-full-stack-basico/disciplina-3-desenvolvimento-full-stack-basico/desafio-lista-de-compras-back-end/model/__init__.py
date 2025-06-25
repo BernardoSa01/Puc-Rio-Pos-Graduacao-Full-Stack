@@ -1,6 +1,7 @@
 from sqlalchemy_utils import database_exists, create_database
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
+import os
 
 # importando os elementos definidos no modelo
 from model.base import Base
@@ -8,8 +9,14 @@ from model.comentario import Comentario
 from model.produto import Produto 
 
 
+db_path = 'database/'
+# verifica se o diretório não existe
+if not os.path.exists(db_path):
+    # caso não exista, cria o diretório
+    os.makedirs(db_path)
+
 # url de acesso ao banco (essa é uma url de acesso ao sqlite local)
-db_url = 'sqlite:///database/db.sqlite3'
+db_url = 'sqlite:///%s/db.sqlite3' % db_path
 
 # cria a engine de conexão com o banco
 engine = create_engine(db_url, echo = False)
