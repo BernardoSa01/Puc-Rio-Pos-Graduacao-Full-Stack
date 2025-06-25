@@ -1,15 +1,24 @@
-import logging
 from logging.config import dictConfig
+import logging
+import os
+
+
+log_path = "log/"
+# Verifica se o diretorio para armexanar os logs não existe
+if not os.path.exists(log_path):
+   # então cria o diretorio
+   os.makedirs(log_path)
+
 
 dictConfig({
     "version": 1,
     "disable_existing_loggers": True,
     "formatters": {
         "default": {
-            "format": "[%(asctime)s] %(levelname)-4s L%(lineno)-4d %(message)s",
+            "format": "[%(asctime)s] %(levelname)-4s %(funcName)s() L%(lineno)-4d %(message)s",
         },
         "detailed": {
-            "format": "[%(asctime)s] %(levelname)-4s L%(lineno)-4d %(message)s - call_trace=%(pathname)s L%(lineno)-4d",
+            "format": "[%(asctime)s] %(levelname)-4s %(funcName)s() L%(lineno)-4d %(message)s - call_trace=%(pathname)s L%(lineno)-4d",
         }
     },
     "handlers": {

@@ -1,84 +1,172 @@
-from flask import Flask, request, send_from_directory, render_template
+from flask_openapi3 import OpenAPI, Info, Tag
+from flas import redirect
+from urllib.parse import unquote
+
 from sqlalchemy.exc import IntegrityError
 
-from model import Session, Produto
-from model.comentario import Comentario
+from model import Session, Produto, Comentario
+from logger import logger
+from schemas import *
+from flask_cors import CORS 
 
-app = Flask(__name__)
+info = Info(title = 'Minha API', version = '1.0.0')
+app = OpenAPI(__name__, info = info)
+CORS(app)
 
-@app.route('/')
-def home():
-    return render_template('home.html'), 200
-
-@app.route('/favicon.ico')
-def favicon():
-    return send_from_directory('static', 'favicon.ico', mimetype = 'image/x-icon')
+# Definindo tags
+home_tag = Tag(name = 'Documentação', description = 'Seleção de documentação: Swagger, Redoc ou RapiDoc')
+produto_tag = Tag(name = 'Produto', description = 'Adição, visualização e remoção de produtos à base')
+comentario_tag = Tag(name = 'Comentario', description = 'Adição de um comentário à um produto cadastrado na base')
 
 
-@app.route('/add_produto', methods=['POST'])
-def add_produto():
-    session = Session()
+@app.get('/', tags = [home_tag])
+def home(): 
+    """ Redireciona para /openapi, tela que permite a escolha do estilo de documentação.
+    """
+    return redirect('/openapi')
+
+
+@app.post('/produto', tags = [produto_tag],
+          responses = {'200': ProdutoViewSchema, '409': ErrorSchema, '400': ErrorSchema })
+def add_produto(form: ProdutoSchema):
+    """ Adiciona um novo produto à base de dados
+
+    Retorna uma representação dos produtos e comentários associados
+    """
     produto = Produto(
-        nome = request.form.get('nome'),
-        quantidade = request.form.get('quantidade'),
-        valor = request.form.get('valor')
-    )
+        nome = form.nome
+        quantidade = form.quantidade
+        valor = form.valor)
+    logger.debug(f"Adicionando produto de nome: '{produto.nome}'")
     try: 
-        # adicionando produto
+        # Criando conexão com a base
+        session = Session()
+        # dicionando produto
         session.add(produto)
-        # efetivando o comando de adição de novo item na tabela
+        # Efetivando o comando de adição de novo item na tabela
         session.commit()
-        return render_template('produto.html', produto = produto), 200
+        logger.debug(f"Adicionando produto de nome: '{produto.nome}")
+        return apresenta_produto(produto), 200
+
     except IntegrityError as e:
-        error_msg = 'Produto de mesmo nome já salvo na base'
-        return render_template('error.html', error_code = 409, error_msg = error_msg), 409
-    except Exception as e:
-        error_msg = 'Não foi possível salvar novo item'
-        print(str(e))
-        return render_template('error.html', error_code = 400, error_msg = error_msg), 400
-
-
-@app.route('/get_produto/<produto_id>', methods = ['GET'])
-def get_produto(produto_id):
-    session = Session()
-    produto = session.query(Produto).filter(Produto.id == produto_id).first()
-    if not produto: 
-        error_msg = 'Produto não encontrado na base'
-        return render_template('error.html', error_code = 404, error_msg = error_msg), 404
-    else:
-        return render_template('produto.html', produto = produto), 200
-
-
-@app.route('/del_produto/<produto_id>', methods = ['DELETE'])
-def del_produto(produto_id):
-    session = Session()
-    count = session.query(Produto).filter(Produto.id == produto_id).delete()
-    session.commit()
-    if count == 1:
-        return render_template('deletado.html', produto_id = produto_id), 200
-    else: 
-        error_msg = 'Produto não encontrado na base'
-        return render_template('error.html', error_code = 404, error_msg = error_msg), 404
-
-
-@app.route('/add_comentario/<produto_id>', methods = ['POST'])
-def add_comentario(produto_id):
-    session = Session()
-    produto = session.query(Produto).filter(Produto.id == produto_id).first()
-    if not produto: 
-        error_msg = 'Produto não encontrado na base'
-        return render_template('error.html', error_code = 404, error_msg = error_msg), 404
+        # Como a duplicidade do nome é a provável razão do IntegrityError
+        error_msg = 'Produto do mesmo nome já salvo na base.'
+        logger.warning(f"Erro ao adicionar produto '{produto.nome}', {error_msg}")
+        return {'message': error_msg}, 409
     
-    autor = request.form.get('autor')
-    texto = request.form.get('texto')
-    n_estrelas = request.form.get('n_estrela')
-    if n_estrelas:
-        n_estrelas = int(n_estrelas)
+    except Exception as e:
+        # Caso haja um erro fora do previsto
+        error_msg = 'Não foi possível salvar novo item.'
+        logger.warning(f"Erro ao adicionar produto '{produto.nome}', {error_msg}")
+        return {'message', error_msg}, 400
 
-    comentario = Comentario(autor, texto, n_estrelas)
+
+@app.get('/produtos', tags = [produto_tag],
+         responses = {'200': ListagemProdutosSchema, '404': ErrorSchema})
+def get_produtos():
+    """ Faz a busca por todos os produtos cadastrados
+
+    Retorna uma representação da listagem de produtos
+    """
+    logger.debug(f'Coletando produtos')
+    # Criando conexão com a base
+    session = Session()
+    # Fazendo a busca
+    produtos = session.query(Produto).all()
+
+    if not produtos: 
+        # Se não há produtos cadastrados
+        return {'produtos': []}, 200
+    else: 
+        logger.debug(f"%d rodutos econtrados" % len(produtos))
+        #retorna a representação de produto
+        print(produtos)
+        return apresenta_produtos(produtos), 200
+
+
+@app.get('/produto', tags = [produto_tag],
+         responses = ['200': ProdutoViewSchema, '404': ErrorSchema])
+def get_produto(query: ProdutoBuscaSchema):
+    """ Faz a busca por um produto a partir do id do produto
+
+    Retorna uma representação do produto e comentários associados
+    """
+    produto_nome = query.nome
+    logger.debug(f'Coletando dados sobre produto #{produto_nome}')
+    # Criando conexão com a base
+    session = Session()
+    # Fazendo a busca
+    produto = session.query(Produto).filter(Produto.nome == produto_nome).first()
+
+    if not produto:
+        # Se o produto não foi encontrado
+        error_msg = 'Produto não encontrado na base.'
+        logger.warning(f"Erro ao buscar produto '{produto_nome}', {error_msg}")
+        return {'message': error_msg}, 404
+    else: 
+        logger.debug(f"Produto encontrado: '{produto.nome}'")
+        # Retorna a representação de produto
+        return apresenta_produto(produto), 200
+
+
+@app.delete('/produto', tags = [produto_tag],
+            responses = {'200': ProdutoDelSchema, '404': ErrorSchema})
+def del_produto(query: ProdutoBuscaSchema):
+    """ Deleta um produto a partir do nome de produto informado
+
+    Retorna uma mensagem de confirmação da remoção
+    """
+    produto_nome = unquote(unquote(query.nome))
+    print(produto_nome)
+    logger.debug(f'Deletando dados sobre produto #{produto_nome}')
+    # Criando conexão com a base
+    session = Session()
+    # Fazendo a remoção
+    count = session.query(Produto).filter(Produto.nome == produto_nome).delete()
+    session.commit()
+
+    if count: 
+        # Retorna a apresentação da mensagem de confirmação
+        logger.debug(f'Deletado produto #{produto_nome}')
+        return {'message': 'Produto removido', 'id': produto_nome}
+    else: 
+        # Se o produto não foi encontrado
+        error_msg = 'Produto não encontrado na base.'
+        logger.warning(f"Erro ao deletar produto #'{produto_nome}', {error_msg}")
+        return {'message': error_msg}, 404
+
+
+@app.post('/comentario', tags = [comentario_tag],
+          responses = {'200': ProdutoViewSchema, '404': ErrorSchema})
+def add_comentario(form: ComentarioSchema):
+    """ Adiciona um novo comentário à um produto cadastrado na base, identificado pelo id
+
+    Retorna uma representação dos produtos e comentários associados.
+    """
+    produto_id = form.produto_id
+    logger.debug(f'Adicionando comentários ao produto #{produto_id}')
+    # Criando conexão com a base
+    session = Session()
+    # Fazendo a busca pelo produto
+    produto = session.query(Produto).filter(Produto.id == produto_id).first()
+
+    if not produto:
+        # Se o produto não for encontrado
+        error_msg = 'Produto não encontrado na base.'
+        logger.warning(f"Erro ao adicionar comentário ao produto '{produto_id}', {error_msg}")
+        return {'message': error_msg}, 404
+
+    # Criando o comentário
+    texto = form.texto
+    comentario = Comentario(texto)
+
+    # Adicionando o comentário ao produto
     produto.adiciona_comentario(comentario)
     session.commit()
-    return render_template('produto.html', produto = produto), 200 
 
-if __name__ == "__main__":
-    app.run(debug=True, port=5001)
+    logger.debug(f'Adicionando comentário ao produto #{produto_id}')
+
+    # Retorna a representação de produto
+    return apresenta_produto(produto), 200
+
+    
