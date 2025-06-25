@@ -1,5 +1,5 @@
 from flask_openapi3 import OpenAPI, Info, Tag
-from flas import redirect
+from flask import redirect
 from urllib.parse import unquote
 
 from sqlalchemy.exc import IntegrityError
@@ -34,8 +34,8 @@ def add_produto(form: ProdutoSchema):
     Retorna uma representação dos produtos e comentários associados
     """
     produto = Produto(
-        nome = form.nome
-        quantidade = form.quantidade
+        nome = form.nome,
+        quantidade = form.quantidade,
         valor = form.valor)
     logger.debug(f"Adicionando produto de nome: '{produto.nome}'")
     try: 
@@ -85,7 +85,7 @@ def get_produtos():
 
 
 @app.get('/produto', tags = [produto_tag],
-         responses = ['200': ProdutoViewSchema, '404': ErrorSchema])
+         responses = {'200': ProdutoViewSchema, '404': ErrorSchema})
 def get_produto(query: ProdutoBuscaSchema):
     """ Faz a busca por um produto a partir do id do produto
 
